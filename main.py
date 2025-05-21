@@ -23,6 +23,7 @@ def load_data():
     data["date"] = pd.to_datetime(data["date"], format="%Y-%m-%d")
     return data
 
+
 data = load_data()
 
 st.header('Food Prices in Cameroon')
@@ -33,7 +34,6 @@ st.write(data.describe())
 
 st.subheader('Map of Food Prices')
 st.map(data)
-
 
 st.header("Graphical details")
 selected_category = st.selectbox(
@@ -48,7 +48,6 @@ selected_commodity = st.selectbox(
 
 filtered_data = data[(data['category'] == selected_category) & (data['commodity'] == selected_commodity)]
 
-
 left, right = st.columns(2)
 with left:
     st.subheader("Price vs. Date")
@@ -59,50 +58,63 @@ with right:
     st.bar_chart(filtered_data.groupby('region')['price'].mean(), x_label='Region', y_label='price(XAF)')
 
 
-
-
 @st.cache_data
 def predict_price(region, department, city, category, commodity):
-    # process all string to int
+    # Créer une copie du jeu de données
     transformed_data = data.copy()
-    transformed_data['region'] = transformed_data['region'].astype('category').cat.codes
-    transformed_data['department'] = transformed_data['department'].astype('category').cat.codes
-    transformed_data['city'] = transformed_data['city'].astype('category').cat.codes
-    transformed_data['category'] = transformed_data['category'].astype('category').cat.codes
-    transformed_data['commodity'] = transformed_data['commodity'].astype('category').cat.codes
-    # get data
+    
+    # Créer les encoders pour chaque catégorie
+    region_encoder = pd.factorize(data['region'])[1]
+    department_encoder = pd.factorize(data['department'])[1]
+    city_encoder = pd.factorize(data['city'])[1]
+    category_encoder = pd.factorize(data['category'])[1]
+    commodity_encoder = pd.factorize(data['commodity'])[1]
+    
+    # Transformer les données d'entraînement
+    transformed_data['region'] = pd.Categorical(transformed_data['region'], categories=region_encoder).codes
+    transformed_data['department'] = pd.Categorical(transformed_data['department'], categories=department_encoder).codes
+    transformed_data['city'] = pd.Categorical(transformed_data['city'], categories=city_encoder).codes
+    transformed_data['category'] = pd.Categorical(transformed_data['category'], categories=category_encoder).codes
+    transformed_data['commodity'] = pd.Categorical(transformed_data['commodity'], categories=commodity_encoder).codes
+    
+    # Préparer les données pour l'entraînement
     X = transformed_data[['region', 'department', 'city', 'category', 'commodity']]
     y = transformed_data['price']
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
-    # train
+    
+    # Entraîner le modèle
     model = RandomForestRegressor(n_estimators=100, random_state=42)
     model.fit(X_train, y_train)
-    # predict
-    prediction_data = pd.DataFrame({'region': [region], 'department': [department], 'city': [city], 'category': [category], 'commodity': [commodity]})
-    transformed_prediction_data = prediction_data.copy()
-    transformed_prediction_data['region'] = transformed_prediction_data['region'].astype('category').cat.codes
-    transformed_prediction_data['department'] = transformed_prediction_data['department'].astype('category').cat.codes
-    transformed_prediction_data['city'] = transformed_prediction_data['city'].astype('category').cat.codes
-    transformed_prediction_data['category'] = transformed_prediction_data['category'].astype('category').cat.codes
-    transformed_prediction_data['commodity'] = transformed_prediction_data['commodity'].astype('category').cat.codes
+    
+    # Préparer les données de prédiction
+    prediction_data = pd.DataFrame({
+        'region': [region],
+        'department': [department],
+        'city': [city],
+        'category': [category],
+        'commodity': [commodity]
+    })
+    
+    # Transformer les données de prédiction avec les mêmes encoders
+    prediction_data['region'] = pd.Categorical(prediction_data['region'], categories=region_encoder).codes
+    prediction_data['department'] = pd.Categorical(prediction_data['department'], categories=department_encoder).codes
+    prediction_data['city'] = pd.Categorical(prediction_data['city'], categories=city_encoder).codes
+    prediction_data['category'] = pd.Categorical(prediction_data['category'], categories=category_encoder).codes
+    prediction_data['commodity'] = pd.Categorical(prediction_data['commodity'], categories=commodity_encoder).codes
 
-    transformed_prediction = model.predict(transformed_prediction_data)
-
-
-    prediction = transformed_prediction[0]
-
-
+    # Faire la prédiction
+    prediction = model.predict(prediction_data)[0]
     return prediction
 
 
-
 st.title("Price Prediction")
+# Créer les selectbox avec les valeurs uniques
 region = st.selectbox("Region", data['region'].unique())
-department = st.selectbox("Department", data['department'].unique())
-city = st.selectbox("City", data['city'].unique())
+department = st.selectbox("Department", data[data['region'] == region]['department'].unique())
+city = st.selectbox("City", data[data['department'] == department]['city'].unique())
 category = st.selectbox("Category", data['category'].unique())
-commodity = st.selectbox("Commodity", data['commodity'].unique())
+commodity = st.selectbox("Commodity", data[data['category'] == category]['commodity'].unique())
 
 if st.button("Predict"):
     prediction = predict_price(region, department, city, category, commodity)
